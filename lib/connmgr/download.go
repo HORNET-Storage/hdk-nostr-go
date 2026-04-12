@@ -106,6 +106,10 @@ func DownloadDag(ctx context.Context, connectionManager ConnectionManager, conne
 		return ctx, nil, fmt.Errorf("WriteResponseToStream failed: %w", err)
 	}
 
+	if progressChan != nil {
+		progressChan <- types.DownloadProgress{ConnectionID: connectionID, LeafsRetreived: len(dag.Leafs)}
+	}
+
 	// Continue receiving packets until we get the final one
 	if !message.IsFinalPacket {
 		for {

@@ -3,7 +3,6 @@ package websocket
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/gorilla/websocket"
 
@@ -20,7 +19,8 @@ func NewWebSocketConnector(url string) *WebSocketConnector {
 }
 
 func (wsc *WebSocketConnector) Connect(ctx context.Context) error {
-	log.Panicln("This does not need to be called for websockets, just use OpenStream")
+	// WebSocket connections are established per-stream in OpenStream.
+	// This is a no-op for compatibility with the Connector interface.
 	return nil
 }
 
