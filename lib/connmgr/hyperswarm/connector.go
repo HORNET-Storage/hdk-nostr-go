@@ -39,7 +39,7 @@ func (hc *HyperswarmConnector) Connect(ctx context.Context) error {
 		return nil
 	}
 
-	result, err := hc.client.ConnectMux(hsClient.ConnectParams{
+	result, err := hc.client.ConnectMuxContext(ctx, hsClient.ConnectParams{
 		PublicKey: hc.remoteKey,
 	})
 	if err != nil {
@@ -79,7 +79,7 @@ func (hc *HyperswarmConnector) OpenStream(ctx context.Context, protocolID string
 		return nil, fmt.Errorf("hyperswarm: not connected")
 	}
 
-	stream, err := hc.client.OpenStream(connID, protocolID)
+	stream, err := hc.client.OpenStreamContext(ctx, connID, protocolID)
 	if err != nil {
 		return nil, fmt.Errorf("hyperswarm open stream %s: %w", protocolID, err)
 	}
