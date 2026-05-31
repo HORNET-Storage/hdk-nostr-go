@@ -15,8 +15,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
-const PublicKeyPrefix = "npub1"
-const PrivateKeyPrefix = "nsec1"
+const PublicKeyPrefix = "npub"
+const PrivateKeyPrefix = "nsec"
 
 func DecodeKey(serializedKey string) ([]byte, error) {
 	bytes, err := hex.DecodeString(TrimPrivateKey(TrimPublicKey(serializedKey)))
@@ -89,11 +89,11 @@ func DeserializePublicKey(serializedKey string) (*secp256k1.PublicKey, error) {
 }
 
 func TrimPrivateKey(privateKey string) string {
-	return strings.TrimPrefix(privateKey, PrivateKeyPrefix)
+	return strings.TrimPrefix(privateKey, PrivateKeyPrefix+"1")
 }
 
 func TrimPublicKey(publicKey string) string {
-	return strings.TrimPrefix(publicKey, PublicKeyPrefix)
+	return strings.TrimPrefix(publicKey, PublicKeyPrefix+"1")
 }
 
 func SignData(data []byte, privateKey *btcec.PrivateKey) (*schnorr.Signature, error) {
