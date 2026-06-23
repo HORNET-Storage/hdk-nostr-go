@@ -8,8 +8,10 @@ import (
 	types "github.com/HORNET-Storage/go-hornet-storage-lib/lib"
 	"github.com/libp2p/go-libp2p"
 
+	hyperswarmConnector "github.com/HORNET-Storage/go-hornet-storage-lib/lib/connmgr/hyperswarm"
 	libp2pConnector "github.com/HORNET-Storage/go-hornet-storage-lib/lib/connmgr/libp2p"
 	websocketConnector "github.com/HORNET-Storage/go-hornet-storage-lib/lib/connmgr/websocket"
+	hsClient "github.com/hornet-storage/hornets-hyperswarm/clients/go/hyperswarm"
 )
 
 const (
@@ -22,6 +24,7 @@ const (
 type ConnectionManager interface {
 	ConnectWithLibp2p(ctx context.Context, connectionId string, serverAddress string, opts ...libp2p.Option) error
 	ConnectWithWebsocket(ctx context.Context, connectionId string, url string) error
+	ConnectWithHyperswarm(ctx context.Context, connectionId string, remotePublicKey string, client *hsClient.Client) error
 	Disconnect(connectionID string) error
 	GetStream(ctx context.Context, connectionID string, protocolID string) (types.Stream, error)
 	ListConnections() map[string]types.Connector
@@ -74,6 +77,21 @@ func (gcm *GenericConnectionManager) ConnectWithWebsocket(ctx context.Context, c
 	defer gcm.mutex.Unlock()
 
 	connector := websocketConnector.NewWebSocketConnector(url)
+
+	gcm.connections[connectionId] = connector
+	return nil
+}
+
+func (gcm *GenericConnectionManager) ConnectWithHyperswarm(ctx context.Context, connectionId string, remotePublicKey string, client *hsClient.Client) error {
+	gcm.mutex.Lock()
+	defer gcm.mutex.Unlock()
+
+	connector := hyperswarmConnector.NewHyperswarmConnector(client, remotePublicKey)
+
+	err := connector.Connect(ctx)
+	if err != nil {
+		return err
+	}
 
 	gcm.connections[connectionId] = connector
 	return nil

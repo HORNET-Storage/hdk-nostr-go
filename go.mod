@@ -8,6 +8,7 @@ require (
 	github.com/HORNET-Storage/Scionic-Merkle-Tree/v2 v2.0.2
 	github.com/btcsuite/btcd/btcutil v1.1.3
 	github.com/fxamacker/cbor/v2 v2.5.0
+	github.com/hornet-storage/hornets-hyperswarm/clients/go v0.0.0
 	github.com/libp2p/go-libp2p v0.35.1
 	github.com/multiformats/go-multiaddr v0.12.4
 	github.com/nbd-wtf/go-nostr v0.30.2
@@ -130,3 +131,5 @@ require (
 	google.golang.org/protobuf v1.34.1 // indirect
 	lukechampine.com/blake3 v1.2.1 // indirect
 )
+
+replace github.com/hornet-storage/hornets-hyperswarm/clients/go => ../hornets-hyperswarm/clients/go

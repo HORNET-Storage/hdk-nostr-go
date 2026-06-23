@@ -298,6 +298,9 @@ func ReadEnvelopeFromStream(stream types.Stream, timeoutDuration time.Duration) 
 		}
 		return &envelope, nil
 	case <-time.After(timeoutDuration):
+		// Close the stream to unblock the decode goroutine so it doesn't leak.
+		// After a timeout the stream is unusable anyway.
+		stream.Close()
 		return nil, fmt.Errorf("read operation timed out after %v", timeoutDuration)
 	}
 }
@@ -353,6 +356,8 @@ func WriteMessageToStream[T any](stream types.Stream, message T, options ...Writ
 			}
 			return nil // Success
 		case <-time.After(opts.timeout):
+			// Close the stream to unblock the encode goroutine so it doesn't leak.
+			stream.Close()
 			lastErr = fmt.Errorf("write operation timed out after %v", opts.timeout)
 			if opts.maxRetries == 0 || attempt == opts.maxRetries {
 				return lastErr
