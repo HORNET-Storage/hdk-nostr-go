@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	types "github.com/HORNET-Storage/go-hornet-storage-lib/lib"
+	types "github.com/HORNET-Storage/hdk-nostr-go/lib"
 	"github.com/fxamacker/cbor/v2"
 )
 

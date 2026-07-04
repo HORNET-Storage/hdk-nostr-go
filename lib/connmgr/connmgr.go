@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"sync"
 
-	types "github.com/HORNET-Storage/go-hornet-storage-lib/lib"
+	types "github.com/HORNET-Storage/hdk-nostr-go/lib"
 	"github.com/libp2p/go-libp2p"
 
-	hyperswarmConnector "github.com/HORNET-Storage/go-hornet-storage-lib/lib/connmgr/hyperswarm"
-	libp2pConnector "github.com/HORNET-Storage/go-hornet-storage-lib/lib/connmgr/libp2p"
-	websocketConnector "github.com/HORNET-Storage/go-hornet-storage-lib/lib/connmgr/websocket"
+	hyperswarmConnector "github.com/HORNET-Storage/hdk-nostr-go/lib/connmgr/hyperswarm"
+	libp2pConnector "github.com/HORNET-Storage/hdk-nostr-go/lib/connmgr/libp2p"
+	websocketConnector "github.com/HORNET-Storage/hdk-nostr-go/lib/connmgr/websocket"
 	hsClient "github.com/hornet-storage/hornets-hyperswarm/clients/go/hyperswarm"
 )
 

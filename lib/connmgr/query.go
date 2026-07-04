@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	types "github.com/HORNET-Storage/go-hornet-storage-lib/lib"
+	types "github.com/HORNET-Storage/hdk-nostr-go/lib"
 )
 
 func QueryDag(ctx context.Context, connectionManager ConnectionManager, connectionID string, query types.QueryFilter) ([]string, error) {

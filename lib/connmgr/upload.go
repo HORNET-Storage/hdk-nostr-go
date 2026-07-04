@@ -8,8 +8,8 @@ import (
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 
 	merkle_dag "github.com/HORNET-Storage/Scionic-Merkle-Tree/v2/dag"
-	types "github.com/HORNET-Storage/go-hornet-storage-lib/lib"
-	"github.com/HORNET-Storage/go-hornet-storage-lib/lib/signing"
+	types "github.com/HORNET-Storage/hdk-nostr-go/lib"
+	"github.com/HORNET-Storage/hdk-nostr-go/lib/signing"
 )
 
 func UploadDag(ctx context.Context, connectionManager ConnectionManager, dag *merkle_dag.Dag, privatekey *secp256k1.PrivateKey, progressChan chan<- types.UploadProgress) error {

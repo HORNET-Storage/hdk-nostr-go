@@ -1,4 +1,4 @@
-module github.com/HORNET-Storage/go-hornet-storage-lib
+module github.com/HORNET-Storage/hdk-nostr-go
 
 go 1.21
 

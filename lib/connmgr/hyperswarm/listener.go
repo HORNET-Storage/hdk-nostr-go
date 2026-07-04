@@ -7,7 +7,7 @@ import (
 	"net"
 	"sync"
 
-	types "github.com/HORNET-Storage/go-hornet-storage-lib/lib"
+	types "github.com/HORNET-Storage/hdk-nostr-go/lib"
 	hsClient "github.com/hornet-storage/hornets-hyperswarm/clients/go/hyperswarm"
 )
 
@@ -176,7 +176,7 @@ func (hl *HyperswarmListener) Close() error {
 }
 
 // HyperswarmIncomingStream wraps an incoming TCP connection from the sidecar
-// as a go-hornet-storage-lib Stream for use by protocol handlers.
+// as a hdk-nostr-go Stream for use by protocol handlers.
 type HyperswarmIncomingStream struct {
 	conn     net.Conn
 	ctx      context.Context

@@ -7,8 +7,8 @@ import (
 
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 
-	types "github.com/HORNET-Storage/go-hornet-storage-lib/lib"
-	"github.com/HORNET-Storage/go-hornet-storage-lib/lib/signing"
+	types "github.com/HORNET-Storage/hdk-nostr-go/lib"
+	"github.com/HORNET-Storage/hdk-nostr-go/lib/signing"
 )
 
 // ClaimOwnership claims ownership of an existing DAG root on a relay.

@@ -6,7 +6,7 @@ import (
 	"net"
 	"sync"
 
-	types "github.com/HORNET-Storage/go-hornet-storage-lib/lib"
+	types "github.com/HORNET-Storage/hdk-nostr-go/lib"
 	hsClient "github.com/hornet-storage/hornets-hyperswarm/clients/go/hyperswarm"
 )
 
@@ -67,7 +67,7 @@ func (hc *HyperswarmConnector) Disconnect() error {
 }
 
 // OpenStream opens a named protocol stream over the mux connection and returns
-// a Stream that satisfies the go-hornet-storage-lib Stream interface.
+// a Stream that satisfies the hdk-nostr-go Stream interface.
 // The protocolID maps directly to the sidecar's protocol name (e.g. "/push", "/upload").
 func (hc *HyperswarmConnector) OpenStream(ctx context.Context, protocolID string) (types.Stream, error) {
 	hc.mu.Lock()
@@ -105,7 +105,7 @@ func (hc *HyperswarmConnector) ConnectionID() string {
 	return hc.connectionID
 }
 
-// HyperswarmStream wraps a sidecar mux stream as a go-hornet-storage-lib Stream.
+// HyperswarmStream wraps a sidecar mux stream as a hdk-nostr-go Stream.
 type HyperswarmStream struct {
 	stream *hsClient.Stream
 	conn   net.Conn

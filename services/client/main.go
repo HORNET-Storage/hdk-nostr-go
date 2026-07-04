@@ -15,9 +15,9 @@ import (
 	"time"
 
 	merkle_dag "github.com/HORNET-Storage/Scionic-Merkle-Tree/v2/dag"
-	types "github.com/HORNET-Storage/go-hornet-storage-lib/lib"
-	"github.com/HORNET-Storage/go-hornet-storage-lib/lib/connmgr"
-	"github.com/HORNET-Storage/go-hornet-storage-lib/lib/signing"
+	types "github.com/HORNET-Storage/hdk-nostr-go/lib"
+	"github.com/HORNET-Storage/hdk-nostr-go/lib/connmgr"
+	"github.com/HORNET-Storage/hdk-nostr-go/lib/signing"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -552,7 +552,7 @@ func QueryDag() {
 
 	query := types.QueryFilter{
 		Tags: map[string]string{
-			"repo_id": "51c014af93d6c4c8a2fe0a710046194a00e1f0558db97bf3c7b80a5967b6a75f:nestr",
+			"repo_id": "51c014af93d6c4c8a2fe0a710046194a00e1f0558db97bf3c7b80a5967b6a75f:nosis",
 		},
 	}
 

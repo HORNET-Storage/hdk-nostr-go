@@ -6,7 +6,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	types "github.com/HORNET-Storage/go-hornet-storage-lib/lib"
+	types "github.com/HORNET-Storage/hdk-nostr-go/lib"
 )
 
 type WebSocketConnector struct {
