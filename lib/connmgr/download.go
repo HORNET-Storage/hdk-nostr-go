@@ -69,6 +69,10 @@ func DownloadDag(ctx context.Context, connectionManager ConnectionManager, conne
 		return ctx, nil, fmt.Errorf("WaitForUploadMessage failed: %w", err)
 	}
 
+	if message.Root != root {
+		return ctx, nil, fmt.Errorf("downloaded DAG root %q does not match requested root %q (possible relay substitution)", message.Root, root)
+	}
+
 	dagPublicKey, err := signing.DeserializePublicKey(message.PublicKey)
 	if err != nil {
 		return nil, nil, fmt.Errorf("DeserializePublicKey failed: %w", err)
