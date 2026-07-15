@@ -49,6 +49,9 @@ func NewHyperswarmListener(client *hsClient.Client) *HyperswarmListener {
 // publicKey and secretKey are hex-encoded ed25519 keys.
 // Returns the server ID.
 func (hl *HyperswarmListener) CreateServer(publicKey, secretKey string) (string, error) {
+	hl.mu.Lock()
+	defer hl.mu.Unlock()
+
 	result, err := hl.client.CreateServer(hsClient.CreateServerParams{
 		PublicKey: publicKey,
 		SecretKey: secretKey,
@@ -62,6 +65,9 @@ func (hl *HyperswarmListener) CreateServer(publicKey, secretKey string) (string,
 
 // CreateServerFromSeed creates a DHT server using a deterministic seed.
 func (hl *HyperswarmListener) CreateServerFromSeed(seed string) (string, string, error) {
+	hl.mu.Lock()
+	defer hl.mu.Unlock()
+
 	kp, err := hl.client.GenerateKeyPair(seed)
 	if err != nil {
 		return "", "", fmt.Errorf("hyperswarm generate keypair: %w", err)
@@ -76,6 +82,59 @@ func (hl *HyperswarmListener) CreateServerFromSeed(seed string) (string, string,
 	}
 
 	hl.serverID = result.ServerID
+	return result.ServerID, kp.PublicKey, nil
+}
+
+// Reattach re-establishes the listener's sidecar-side state on a new client
+// after the previous sidecar process or connection was lost. It recreates the
+// DHT server from the deterministic seed (yielding the same public key as the
+// original CreateServerFromSeed call) and re-registers every known protocol
+// with the new sidecar, reusing the existing local TCP listeners so accept
+// loops and registered handlers keep running untouched.
+//
+// The sidecar makes this safe to retry: create-server replaces a stale server
+// entry holding the same public key, and register-protocol is an idempotent
+// overwrite of the protocol -> local-port mapping. If any step fails, the
+// listener keeps pointing at the previous client and the caller may retry.
+func (hl *HyperswarmListener) Reattach(client *hsClient.Client, seed string) (string, string, error) {
+	if client == nil {
+		return "", "", fmt.Errorf("hyperswarm reattach: client is nil")
+	}
+
+	hl.mu.Lock()
+	defer hl.mu.Unlock()
+
+	select {
+	case <-hl.ctx.Done():
+		return "", "", fmt.Errorf("hyperswarm reattach: listener is closed")
+	default:
+	}
+
+	kp, err := client.GenerateKeyPair(seed)
+	if err != nil {
+		return "", "", fmt.Errorf("hyperswarm reattach generate keypair: %w", err)
+	}
+
+	result, err := client.CreateServer(hsClient.CreateServerParams{
+		PublicKey: kp.PublicKey,
+		SecretKey: kp.SecretKey,
+	})
+	if err != nil {
+		return "", "", fmt.Errorf("hyperswarm reattach create server: %w", err)
+	}
+
+	for protocol, listener := range hl.listeners {
+		port := listener.Addr().(*net.TCPAddr).Port
+		if _, err := client.RegisterProtocol(result.ServerID, protocol, port); err != nil {
+			return "", "", fmt.Errorf("hyperswarm reattach register protocol %s: %w", protocol, err)
+		}
+		log.Printf("[hyperswarm] Re-registered protocol handler: %s on port %d", protocol, port)
+	}
+
+	hl.client = client
+	hl.serverID = result.ServerID
+
+	log.Printf("[hyperswarm] Listener reattached to sidecar: server %s, %d protocol(s)", result.ServerID, len(hl.listeners))
 	return result.ServerID, kp.PublicKey, nil
 }
 
@@ -143,17 +202,25 @@ func (hl *HyperswarmListener) acceptLoop(protocol string, listener net.Listener,
 
 // Announce advertises the server on a DHT topic so peers can discover it.
 func (hl *HyperswarmListener) Announce(topic string) error {
-	_, err := hl.client.Announce(hl.serverID, topic)
+	hl.mu.RLock()
+	client, serverID := hl.client, hl.serverID
+	hl.mu.RUnlock()
+
+	_, err := client.Announce(serverID, topic)
 	return err
 }
 
 // ServerID returns the sidecar server ID.
 func (hl *HyperswarmListener) ServerID() string {
+	hl.mu.RLock()
+	defer hl.mu.RUnlock()
 	return hl.serverID
 }
 
 // Client returns the underlying sidecar RPC client.
 func (hl *HyperswarmListener) Client() *hsClient.Client {
+	hl.mu.RLock()
+	defer hl.mu.RUnlock()
 	return hl.client
 }
 
