@@ -113,6 +113,19 @@ func WithWriteRetryDelay(delay time.Duration) WriteOption {
 	}
 }
 
+// MessageReader retains a CBOR decoder across a sequence of envelopes. This is
+// required when a peer pipelines messages: a decoder may buffer bytes belonging
+// to the next envelope, and replacing it would discard those bytes.
+// A MessageReader must have exactly one reading goroutine.
+type MessageReader struct {
+	stream  types.Stream
+	decoder *cbor.Decoder
+}
+
+func NewMessageReader(stream types.Stream) *MessageReader {
+	return &MessageReader{stream: stream, decoder: cbor.NewDecoder(stream)}
+}
+
 func BuildErrorMessage(message string, err error) types.ErrorMessage {
 	log.Println("\n====[STREAM ERROR MESSAGE]====")
 	if len(message) > 0 {
@@ -178,8 +191,16 @@ func WaitForResponse(stream types.Stream) (*types.ResponseMessage, error) {
 	return ReadMessageFromStream[types.ResponseMessage](stream)
 }
 
+func WaitForResponseFromReader(reader *MessageReader) (*types.ResponseMessage, error) {
+	return ReadMessageFromReader[types.ResponseMessage](reader)
+}
+
 func WaitForUploadMessage(stream types.Stream) (*types.UploadMessage, error) {
 	return ReadMessageFromStream[types.UploadMessage](stream)
+}
+
+func WaitForUploadMessageFromReader(reader *MessageReader) (*types.UploadMessage, error) {
+	return ReadMessageFromReader[types.UploadMessage](reader)
 }
 
 func WaitForDownloadMessage(stream types.Stream) (*types.DownloadMessage, error) {
@@ -195,6 +216,14 @@ func WaitForAdvancedQueryMessage(stream types.Stream) (*types.AdvancedQueryMessa
 }
 
 func ReadMessageFromStream[T any](stream types.Stream, options ...ReadOption) (*T, error) {
+	return ReadMessageFromReader[T](NewMessageReader(stream), options...)
+}
+
+func ReadMessageFromReader[T any](reader *MessageReader, options ...ReadOption) (*T, error) {
+	if reader == nil || reader.stream == nil || reader.decoder == nil {
+		return nil, fmt.Errorf("message reader is not initialized")
+	}
+
 	// Parse options
 	opts := defaultReadOptions()
 	for _, option := range options {
@@ -213,7 +242,7 @@ func ReadMessageFromStream[T any](stream types.Stream, options ...ReadOption) (*
 			time.Sleep(opts.retryDelay)
 		}
 
-		envelope, err := ReadEnvelopeFromStream(stream, opts.timeout)
+		envelope, err := reader.ReadEnvelope(opts.timeout)
 		if err != nil {
 			lastErr = err
 			// Don't retry on terminal errors (stream closure, EOF, etc.)
@@ -271,6 +300,13 @@ func ReadMessageFromStream[T any](stream types.Stream, options ...ReadOption) (*
 }
 
 func ReadEnvelopeFromStream(stream types.Stream, timeoutDuration time.Duration) (*types.MessageEnvelope, error) {
+	return NewMessageReader(stream).ReadEnvelope(timeoutDuration)
+}
+
+func (reader *MessageReader) ReadEnvelope(timeoutDuration time.Duration) (*types.MessageEnvelope, error) {
+	if reader == nil || reader.stream == nil || reader.decoder == nil {
+		return nil, fmt.Errorf("message reader is not initialized")
+	}
 	if timeoutDuration == 0 {
 		timeoutDuration = 300 * time.Second // Default timeout increased for large repositories
 	}
@@ -280,10 +316,10 @@ func ReadEnvelopeFromStream(stream types.Stream, timeoutDuration time.Duration) 
 	var envelope types.MessageEnvelope
 	var decodeErr error
 
-	// Start a goroutine to decode the message
+	// Continue decoding with the same decoder so any read-ahead bytes remain
+	// available to the next envelope in this message sequence.
 	go func() {
-		streamDecoder := cbor.NewDecoder(stream)
-		decodeErr = streamDecoder.Decode(&envelope)
+		decodeErr = reader.decoder.Decode(&envelope)
 		close(done)
 	}()
 
@@ -300,7 +336,7 @@ func ReadEnvelopeFromStream(stream types.Stream, timeoutDuration time.Duration) 
 	case <-time.After(timeoutDuration):
 		// Close the stream to unblock the decode goroutine so it doesn't leak.
 		// After a timeout the stream is unusable anyway.
-		stream.Close()
+		reader.stream.Close()
 		return nil, fmt.Errorf("read operation timed out after %v", timeoutDuration)
 	}
 }

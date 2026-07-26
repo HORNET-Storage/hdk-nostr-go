@@ -19,134 +19,107 @@ func DownloadDag(ctx context.Context, connectionManager ConnectionManager, conne
 	}
 	defer stream.Close()
 
-	var publicKey *string = nil
-	var signature *string = nil
-
-	// Because this is a request and not an upload, we don't always care about the request being signed, signed requests are for locked resources etc
+	downloadMessage := types.DownloadMessage{Root: root}
 	if privatekey != nil {
-		sig, err := signing.SignSerializedCid(root, privatekey)
-		if err != nil {
-			return ctx, nil, err
+		sig, signErr := signing.SignSerializedCid(root, privatekey)
+		if signErr != nil {
+			return ctx, nil, signErr
 		}
-
-		serializedSignature := sig.Serialize()
-
-		serializedPubkey, err := signing.SerializePublicKey(privatekey.PubKey())
-		if err != nil {
-			return ctx, nil, err
+		serializedPubkey, serializeErr := signing.SerializePublicKey(privatekey.PubKey())
+		if serializeErr != nil {
+			return ctx, nil, serializeErr
 		}
-
-		err = signing.VerifySerializedCIDSignature(sig, root, privatekey.PubKey())
-		if err != nil {
-			return ctx, nil, err
+		if verifyErr := signing.VerifySerializedCIDSignature(sig, root, privatekey.PubKey()); verifyErr != nil {
+			return ctx, nil, verifyErr
 		}
-
-		encodedSignature := hex.EncodeToString(serializedSignature)
-
-		publicKey = serializedPubkey
-		signature = &encodedSignature
+		downloadMessage.PublicKey = *serializedPubkey
+		downloadMessage.Signature = hex.EncodeToString(sig.Serialize())
 	}
-
-	downloadMessage := types.DownloadMessage{
-		Root: root,
-	}
-
-	if signature != nil {
-		downloadMessage.PublicKey = *publicKey
-		downloadMessage.Signature = *signature
-	}
-
 	if filter != nil {
 		downloadMessage.Filter = filter
 	}
-
 	if err := WriteMessageToStream(stream, downloadMessage); err != nil {
 		return ctx, nil, err
 	}
 
-	message, err := WaitForUploadMessage(stream)
+	reject := func(cause error) {
+		_ = WriteMessageToStream(stream, BuildResponseMessage(false, cause.Error()))
+	}
+
+	messageReader := NewMessageReader(stream)
+	uploadMessage, err := WaitForUploadMessageFromReader(messageReader)
 	if err != nil {
 		return ctx, nil, fmt.Errorf("WaitForUploadMessage failed: %w", err)
 	}
-
-	if message.Root != root {
-		return ctx, nil, fmt.Errorf("downloaded DAG root %q does not match requested root %q (possible relay substitution)", message.Root, root)
+	if uploadMessage.Root != root {
+		err = fmt.Errorf("downloaded DAG root %q does not match requested root %q (possible relay substitution)", uploadMessage.Root, root)
+		reject(err)
+		return ctx, nil, err
 	}
-
-	dagPublicKey, err := signing.DeserializePublicKey(message.PublicKey)
+	dagPublicKey, err := signing.DeserializePublicKey(uploadMessage.PublicKey)
 	if err != nil {
-		return nil, nil, fmt.Errorf("DeserializePublicKey failed: %w", err)
+		err = fmt.Errorf("DeserializePublicKey failed: %w", err)
+		reject(err)
+		return ctx, nil, err
 	}
-
-	signatureBytes, err := hex.DecodeString(message.Signature)
+	signatureBytes, err := hex.DecodeString(uploadMessage.Signature)
 	if err != nil {
-		return nil, nil, fmt.Errorf("hex.DecodeString signature failed: %w", err)
+		err = fmt.Errorf("hex.DecodeString signature failed: %w", err)
+		reject(err)
+		return ctx, nil, err
 	}
-
 	dagSignature, err := schnorr.ParseSignature(signatureBytes)
 	if err != nil {
-		return nil, nil, fmt.Errorf("ParseSignature failed: %w", err)
+		err = fmt.Errorf("ParseSignature failed: %w", err)
+		reject(err)
+		return ctx, nil, err
+	}
+	if err = signing.VerifySerializedCIDSignature(dagSignature, uploadMessage.Root, dagPublicKey); err != nil {
+		err = fmt.Errorf("VerifySerializedCIDSignature failed for root %s: %w", uploadMessage.Root, err)
+		reject(err)
+		return ctx, nil, err
 	}
 
-	err = signing.VerifySerializedCIDSignature(dagSignature, message.Root, dagPublicKey)
-	if err != nil {
-		return nil, nil, fmt.Errorf("VerifySerializedCIDSignature failed for root %s: %w", message.Root, err)
-	}
+	dag := &merkle_dag.Dag{Root: uploadMessage.Root, Leafs: make(map[string]*merkle_dag.DagLeaf)}
+	receiveState := newPacketReceiveState(uploadMessage.Root, uploadMessage.PublicKey, uploadMessage.Signature)
+	for {
+		packet := merkle_dag.BatchedTransmissionPacketFromSerializable(&uploadMessage.Packet)
+		if err = receiveState.validate(uploadMessage, packet); err != nil {
+			err = fmt.Errorf("invalid transmission packet: %w", err)
+			reject(err)
+			return ctx, nil, err
+		}
+		if err = dag.ApplyAndVerifyBatchedTransmissionPacket(packet); err != nil {
+			err = fmt.Errorf("ApplyAndVerifyBatchedTransmissionPacket failed: %w", err)
+			reject(err)
+			return ctx, nil, err
+		}
+		receiveState.commit(uploadMessage, packet)
 
-	dag := &merkle_dag.Dag{
-		Root:  message.Root,
-		Leafs: make(map[string]*merkle_dag.DagLeaf),
-	}
-
-	packet := merkle_dag.BatchedTransmissionPacketFromSerializable(&message.Packet)
-
-	err = dag.ApplyAndVerifyBatchedTransmissionPacket(packet)
-	if err != nil {
-		return ctx, nil, fmt.Errorf("ApplyAndVerifyBatchedTransmissionPacket failed: %w", err)
-	}
-
-	err = WriteResponseToStream(stream, true)
-	if err != nil {
-		return ctx, nil, fmt.Errorf("WriteResponseToStream failed: %w", err)
-	}
-
-	if progressChan != nil {
-		progressChan <- types.DownloadProgress{ConnectionID: connectionID, LeafsRetreived: len(dag.Leafs)}
-	}
-
-	// Continue receiving packets until we get the final one
-	if !message.IsFinalPacket {
-		for {
-			message, err := WaitForUploadMessage(stream)
-			if err != nil {
+		if uploadMessage.IsFinalPacket {
+			if receiveState.windowed && receiveState.next != receiveState.total {
+				err = fmt.Errorf("incomplete packet stream: verified %d of %d packets", receiveState.next, receiveState.total)
+				reject(err)
 				return ctx, nil, err
 			}
-			packet := merkle_dag.BatchedTransmissionPacketFromSerializable(&message.Packet)
-
-			err = dag.ApplyAndVerifyBatchedTransmissionPacket(packet)
-			if err != nil {
+			if err = dag.Verify(); err != nil {
+				reject(err)
 				return ctx, nil, err
-			}
-
-			err = WriteResponseToStream(stream, true)
-			if err != nil {
-				return ctx, nil, err
-			}
-
-			if progressChan != nil {
-				progressChan <- types.DownloadProgress{ConnectionID: connectionID, LeafsRetreived: len(dag.Leafs)}
-			}
-
-			// Check if this is the final packet
-			if message.IsFinalPacket {
-				break
 			}
 		}
-	}
-
-	err = dag.Verify()
-	if err != nil {
-		return ctx, nil, err
+		if err = WriteMessageToStream(stream, BuildResponseMessage(true, receiveState.acknowledgment())); err != nil {
+			return ctx, nil, fmt.Errorf("failed to acknowledge verified packet: %w", err)
+		}
+		if progressChan != nil {
+			progressChan <- types.DownloadProgress{ConnectionID: connectionID, LeafsRetreived: len(dag.Leafs)}
+		}
+		if uploadMessage.IsFinalPacket {
+			break
+		}
+		uploadMessage, err = WaitForUploadMessageFromReader(messageReader)
+		if err != nil {
+			return ctx, nil, err
+		}
 	}
 
 	dagData := &types.DagData{
@@ -154,6 +127,5 @@ func DownloadDag(ctx context.Context, connectionManager ConnectionManager, conne
 		Signature: *dagSignature,
 		Dag:       *dag,
 	}
-
 	return ctx, dagData, nil
 }

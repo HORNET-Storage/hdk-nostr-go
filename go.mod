@@ -5,7 +5,7 @@ go 1.24.0
 toolchain go1.24.1
 
 require (
-	github.com/HORNET-Storage/Scionic-Merkle-Tree/v2 v2.3.6
+	github.com/HORNET-Storage/Scionic-Merkle-Tree/v2 v2.3.7
 	github.com/btcsuite/btcd/btcutil v1.1.3
 	github.com/fxamacker/cbor/v2 v2.9.0
 	github.com/hornet-storage/hornets-hyperswarm/clients/go v0.0.0

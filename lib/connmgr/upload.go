@@ -2,7 +2,7 @@ package connmgr
 
 import (
 	"context"
-	"encoding/hex"
+
 	"fmt"
 
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
@@ -54,56 +54,26 @@ func UploadDagSingle(ctx context.Context, connectionManager ConnectionManager, c
 	totalLeafs := len(dag.Leafs)
 	leafsSent := 0
 	sequence := dag.GetBatchedLeafSequence()
-	total := len(sequence)
-
-	for i, packet := range sequence {
-		message := types.UploadMessage{
-			Root:          dag.Root,
-			Packet:        *packet.ToSerializable(),
-			IsFinalPacket: i == total-1, // Mark the last packet
+	cumulativeLeafs := make([]int, len(sequence))
+	for index, packet := range sequence {
+		if packet != nil {
+			leafsSent += len(packet.Leaves)
 		}
+		cumulativeLeafs[index] = leafsSent
+	}
+	leafsSent = 0
 
-		// Only add the pub key and signature to the first packet as that's what contains the root
-		if i == 0 {
-			message.PublicKey = *serializedPubkey
-			message.Signature = hex.EncodeToString(serializedSignature)
-		}
-
-		if err := WriteMessageToStream(stream, message); err != nil {
-			if progressChan != nil {
-				progressChan <- types.UploadProgress{ConnectionID: connectionID, LeafsSent: leafsSent, TotalLeafs: totalLeafs, Error: err}
-			}
-
-			return err
-		}
-
-		response, err := WaitForResponse(stream)
-		if err != nil {
-			err = fmt.Errorf("failed to receive response: %w", err)
-
-			if progressChan != nil {
-				progressChan <- types.UploadProgress{ConnectionID: connectionID, LeafsSent: leafsSent, TotalLeafs: totalLeafs, Error: err}
-			}
-
-			return err
-		}
-
-		if !response.Ok {
-			err = fmt.Errorf("did not receive a valid response: %w", err)
-
-			if progressChan != nil {
-				progressChan <- types.UploadProgress{ConnectionID: connectionID, LeafsSent: leafsSent, TotalLeafs: totalLeafs, Error: err}
-			}
-
-			return err
-		}
-
-		leafsSent += len(packet.Leaves)
-
+	_, err = sendBatchedUpload(ctx, stream, dag.Root, sequence, *serializedPubkey, fmt.Sprintf("%x", serializedSignature), func(packetIndex int) {
+		leafsSent = cumulativeLeafs[packetIndex]
 		if progressChan != nil {
 			progressChan <- types.UploadProgress{ConnectionID: connectionID, LeafsSent: leafsSent, TotalLeafs: totalLeafs}
 		}
+	})
+	if err != nil {
+		if progressChan != nil {
+			progressChan <- types.UploadProgress{ConnectionID: connectionID, LeafsSent: leafsSent, TotalLeafs: totalLeafs, Error: err}
+		}
+		return err
 	}
-
 	return nil
 }
